@@ -1,15 +1,7 @@
 const state = {
   perfilId: 'perfil-principal',
   route: '#/dashboard',
-  dados: {
-    tentativas: [],
-    editais: [],
-    ciclos: [],
-    resumos: [],
-    revisoes: [],
-    simulados: [],
-    perfis: []
-  }
+  theme: localStorage.getItem('theme') || 'dark'
 };
 
 const titleMap = {
@@ -56,6 +48,10 @@ function getTentativas() {
   return getRecords('tentativas', []);
 }
 
+function safeText(value, fallback = '—') {
+  return value && String(value).trim() ? String(value).trim() : fallback;
+}
+
 function getStats() {
   const tentativas = getTentativas();
   const total = tentativas.length;
@@ -65,7 +61,7 @@ function getStats() {
 
   const countByDisciplina = {};
   tentativas.forEach((item) => {
-    const disciplina = item.disciplina || 'Sem disciplina';
+    const disciplina = safeText(item.disciplina, 'Sem disciplina');
     countByDisciplina[disciplina] = (countByDisciplina[disciplina] || 0) + 1;
   });
 
@@ -78,8 +74,20 @@ function getStats() {
 
 function renderDashboard() {
   const stats = getStats();
+  const recent = getTentativas().slice(-3).reverse();
+
+  const latestRows = recent.length ? recent.map((item) => `
+    <div class="mini-activity">
+      <div>
+        <strong>${safeText(item.disciplina)}</strong>
+        <small>${safeText(item.assunto)} • ${safeText(item.banca)}</small>
+      </div>
+      <span class="tag ${item.resultado === 'certa' || item.acertou ? 'success' : 'danger'}">${item.resultado === 'certa' || item.acertou ? 'Certa' : 'Errada'}</span>
+    </div>
+  `).join('') : '<div class="empty-cell-box">Nenhuma atividade recente.</div>';
+
   return `
-    <section class="panel">
+    <section class="panel dashboard-panel">
       <div class="panel-head">
         <div>
           <p class="eyebrow">Resumo do desempenho</p>
@@ -89,10 +97,22 @@ function renderDashboard() {
       </div>
 
       <div class="kpis">
-        <div class="kpi"><strong>${stats.total}</strong><span>Questões</span></div>
-        <div class="kpi"><strong>${stats.acertadas}</strong><span>Acertos</span></div>
-        <div class="kpi"><strong>${stats.erradas}</strong><span>Erros</span></div>
-        <div class="kpi"><strong>${stats.taxa}%</strong><span>Taxa</span></div>
+        <div class="kpi accent">
+          <span>Questões</span>
+          <strong>${stats.total}</strong>
+        </div>
+        <div class="kpi green">
+          <span>Acertos</span>
+          <strong>${stats.acertadas}</strong>
+        </div>
+        <div class="kpi danger">
+          <span>Erros</span>
+          <strong>${stats.erradas}</strong>
+        </div>
+        <div class="kpi gold">
+          <span>Taxa</span>
+          <strong>${stats.taxa}%</strong>
+        </div>
       </div>
 
       <div class="resumo-grid">
@@ -102,7 +122,31 @@ function renderDashboard() {
         </div>
         <div class="mini-panel">
           <span class="muted">Status</span>
-          <h3>${stats.total ? 'Ativo' : 'Sem dados'}</h3>
+          <h3>${stats.total ? 'Em evolução' : 'Sem dados'}</h3>
+        </div>
+        <div class="mini-panel">
+          <span class="muted">Próximo foco</span>
+          <h3>${stats.total ? 'Revisão ativa' : 'Sem foco'}</h3>
+        </div>
+      </div>
+
+      <div class="two-column-grid">
+        <div class="sub-panel">
+          <div class="sub-panel-head">
+            <h3>Atividades recentes</h3>
+          </div>
+          <div class="stack-list">${latestRows}</div>
+        </div>
+
+        <div class="sub-panel">
+          <div class="sub-panel-head">
+            <h3>Meta do dia</h3>
+          </div>
+          <ul class="checklist">
+            <li>Resolver 10 questões de revisão</li>
+            <li>Estudar 1 assunto prioritário</li>
+            <li>Atualizar caderno de resumos</li>
+          </ul>
         </div>
       </div>
     </section>
@@ -114,11 +158,11 @@ function renderTentativas() {
   const rows = tentativas.length
     ? tentativas.slice().reverse().map((item) => `
       <tr>
-        <td>${item.disciplina || '—'}</td>
-        <td>${item.assunto || '—'}</td>
-        <td>${item.banca || '—'}</td>
-        <td>${item.concurso || '—'}</td>
-        <td><span class="status ${item.resultado === 'certa' || item.acertou ? 'success' : 'danger'}">${item.resultado === 'certa' || item.acertou ? 'Certa' : 'Errada'}</span></td>
+        <td>${safeText(item.disciplina)}</td>
+        <td>${safeText(item.assunto)}</td>
+        <td>${safeText(item.banca)}</td>
+        <td>${safeText(item.concurso)}</td>
+        <td><span class="tag ${item.resultado === 'certa' || item.acertou ? 'success' : 'danger'}">${item.resultado === 'certa' || item.acertou ? 'Certa' : 'Errada'}</span></td>
         <td><button class="btn btn-small danger" data-delete-id="${item.id}">Excluir</button></td>
       </tr>
     `).join('')
@@ -149,10 +193,10 @@ function renderEditais() {
     ? editais.map((item) => `
       <div class="list-card">
         <div>
-          <strong>${item.nome || 'Edital sem nome'}</strong>
-          <p>${item.disciplina || 'Sem disciplina'} • ${item.area || 'Área não definida'}</p>
+          <strong>${safeText(item.nome)}</strong>
+          <p>${safeText(item.disciplina)} • ${safeText(item.area)}</p>
         </div>
-        <span class="pill">${item.data || 'Sem data'}</span>
+        <span class="pill">${safeText(item.data)}</span>
       </div>
     `).join('')
     : '<div class="empty-cell-box">Nenhum edital cadastrado.</div>';
@@ -171,10 +215,10 @@ function renderCaderno() {
     ? resumos.map((item) => `
       <div class="list-card note-card">
         <div>
-          <strong>${item.titulo || 'Resumo sem título'}</strong>
-          <p>${item.disciplina || 'Sem disciplina'}</p>
+          <strong>${safeText(item.titulo)}</strong>
+          <p>${safeText(item.disciplina)}</p>
         </div>
-        <small>${item.texto || 'Sem conteúdo.'}</small>
+        <small>${safeText(item.texto)}</small>
       </div>
     `).join('')
     : '<div class="empty-cell-box">Nenhum resumo salvo.</div>';
@@ -192,8 +236,8 @@ function renderSimulados() {
   const cards = simulados.length
     ? simulados.map((item) => `
       <div class="list-card">
-        <div><strong>${item.nome || 'Simulado'}</strong><p>${item.disciplina || 'Sem disciplina'} • ${item.nota || 0} pontos</p></div>
-        <span class="pill ${item.nota >= 70 ? 'positive' : 'warning'}">${item.nota >= 70 ? 'Bom' : 'Precisa revisar'}</span>
+        <div><strong>${safeText(item.nome)}</strong><p>${safeText(item.disciplina)} • ${item.nota || 0} pontos</p></div>
+        <span class="pill ${Number(item.nota || 0) >= 70 ? 'positive' : 'warning'}">${Number(item.nota || 0) >= 70 ? 'Bom' : 'Precisa revisar'}</span>
       </div>
     `).join('')
     : '<div class="empty-cell-box">Nenhum simulado registrado.</div>';
@@ -210,7 +254,7 @@ function renderPerfis() {
   const perfis = getRecords('perfis', [{ id: 'perfil-principal', nome: 'Perfil principal' }]);
   const cards = perfis.map((perfil) => `
     <div class="list-card">
-      <div><strong>${perfil.nome || 'Perfil'}</strong><p>${perfil.id === 'perfil-principal' ? 'Perfil principal' : 'Perfil adicional'}</p></div>
+      <div><strong>${safeText(perfil.nome)}</strong><p>${perfil.id === 'perfil-principal' ? 'Perfil principal' : 'Perfil adicional'}</p></div>
       <button class="btn btn-small" data-select-perfil="${perfil.id}">Ativar</button>
     </div>
   `).join('');
@@ -240,10 +284,10 @@ function renderStatsPage(type) {
   const map = {};
 
   tentativas.forEach((item) => {
-    const key = type === 'disciplinas' ? (item.disciplina || 'Sem disciplina') :
-      type === 'assuntos' ? (item.assunto || 'Sem assunto') :
-      type === 'bancas' ? (item.banca || 'Sem banca') :
-      (item.concurso || 'Sem concurso');
+    const key = type === 'disciplinas' ? (safeText(item.disciplina, 'Sem disciplina')) :
+      type === 'assuntos' ? (safeText(item.assunto, 'Sem assunto')) :
+      type === 'bancas' ? (safeText(item.banca, 'Sem banca')) :
+      (safeText(item.concurso, 'Sem concurso'));
     map[key] = (map[key] || 0) + 1;
   });
 
@@ -277,6 +321,8 @@ function renderPage() {
   const pageTitle = document.getElementById('page-title');
   if (pageTitle) pageTitle.textContent = titleMap[route] || 'Dashboard';
 
+  setActiveNav(route);
+
   let html = renderDashboard();
   switch (route) {
     case '/dashboard': html = renderDashboard(); break;
@@ -301,6 +347,13 @@ function renderPage() {
 
   view.innerHTML = html;
   bindAfterRender();
+}
+
+function setActiveNav(route) {
+  document.querySelectorAll('.nav-item[data-route]').forEach((link) => {
+    const itemRoute = link.getAttribute('data-route');
+    link.classList.toggle('active', route === `/${itemRoute}` || route === itemRoute);
+  });
 }
 
 function bindAfterRender() {
@@ -378,7 +431,9 @@ function bindAfterRender() {
   }));
 
   document.querySelectorAll('[data-toggle-theme]').forEach((button) => button.addEventListener('click', () => {
-    document.body.classList.toggle('theme-light');
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    document.body.classList.toggle('theme-light', state.theme === 'light');
+    localStorage.setItem('theme', state.theme);
     showToast('Tema alternado.');
   }));
 }
@@ -498,9 +553,18 @@ function setupSidebar() {
       if (menu) menu.classList.toggle('open');
     });
   });
+
+  document.querySelectorAll('.nav-item[data-route]').forEach((link) => {
+    link.addEventListener('click', () => {
+      if (window.innerWidth <= 900) {
+        applySidebar(false);
+      }
+    });
+  });
 }
 
 function setupApp() {
+  document.body.classList.toggle('theme-light', state.theme === 'light');
   setupSidebar();
   renderPage();
   const addQuestaoBtn = document.getElementById('add-questao-btn');
