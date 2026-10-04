@@ -70,7 +70,9 @@
           <span id="streak-mini-count">0 dias</span>
         </div>
         <div class="conta-sync" id="conta-sync">
-          <button id="conta-btn" class="btn btn-sm conta-btn">Sincronizar</button>
+          <button id="conta-btn" class="btn btn-sm conta-btn">
+            <span id="conta-btn-label">Sincronizar</span>
+          </button>
         </div>
       </div>
     </aside>
@@ -127,27 +129,5 @@
   <script src="app.js"></script>
   <script src="tts-modulo.js"></script>
   <script src="tts-caderno-integracao.js"></script>
-  <script>
-    (function () {
-      const btn = document.getElementById('conta-btn');
-      const label = document.getElementById('conta-btn-label');
-      if (window.cloudSync) {
-        cloudSync.init((user) => {
-          if (user) {
-            if (label) label.textContent = user.displayName ? `${user.displayName.split(' ')[0]} (sair)` : 'Sair';
-            btn.title = `Conectado como ${user.email}. Clique para sair.`;
-          } else {
-            if (label) label.textContent = 'Sincronizar';
-            btn.title = 'Entrar com Google para sincronizar entre dispositivos';
-          }
-        });
-
-        btn.addEventListener('click', () => {
-          if (cloudSync.usuarioAtual) cloudSync.sair();
-          else cloudSync.entrarComGoogle();
-        });
-      }
-    })();
-  </script>
 </body>
 </html>
