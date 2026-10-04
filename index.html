@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Trilha de Aprovação — Controle de Questões</title>
+  <meta name="description" content="Controle de desempenho em questões de concursos públicos, 100% offline.">
+  <meta name="theme-color" content="#0B0F14">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="tts-caderno-estilos.css">
+  <link rel="stylesheet" href="revisao-edicao.css">
+</head>
+<body>
+  <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">◈</span>
+          <span class="brand-text">
+            <strong>Trilha</strong>
+            <small>de Aprovação</small>
+          </span>
+        </div>
+        <button id="sidebar-toggle" class="icon-btn" aria-label="Recolher menu">☰</button>
+      </div>
+
+      <nav class="nav" id="nav">
+        <a href="#/dashboard" class="nav-item" data-route="dashboard">Dashboard</a>
+        <a href="#/tentativas" class="nav-item" data-route="tentativas">Tentativas</a>
+        <a href="#/resolver-ia" class="nav-item" data-route="resolver-ia">Resolver com IA</a>
+        <a href="#/mentor" class="nav-item" data-route="mentor">Mentor IA</a>
+        <a href="#/revisao" class="nav-item" data-route="revisao">Revisão do Dia</a>
+        <a href="#/diagnostico" class="nav-item" data-route="diagnostico">Diagnóstico de Erros</a>
+        <a href="#/caderno" class="nav-item" data-route="caderno">Caderno de Resumos</a>
+        <a href="#/ciclo" class="nav-item" data-route="ciclo">Ciclo de Estudos</a>
+
+        <div class="nav-group">
+          <button class="nav-item nav-group-toggle" data-group="estatisticas">Estatísticas</button>
+          <div class="nav-submenu" data-submenu="estatisticas">
+            <a href="#/estatisticas/disciplinas" data-route="estatisticas/disciplinas">Disciplinas</a>
+            <a href="#/estatisticas/assuntos" data-route="estatisticas/assuntos">Assuntos</a>
+            <a href="#/estatisticas/bancas" data-route="estatisticas/bancas">Bancas</a>
+            <a href="#/estatisticas/concursos" data-route="estatisticas/concursos">Concursos</a>
+          </div>
+        </div>
+
+        <a href="#/editais" class="nav-item" data-route="editais">Editais</a>
+        <a href="#/simulados" class="nav-item" data-route="simulados">Simulados</a>
+        <a href="#/perfis" class="nav-item" data-route="perfis">Perfis</a>
+
+        <div class="nav-group">
+          <button class="nav-item nav-group-toggle" data-group="configuracoes">Configurações</button>
+          <div class="nav-submenu" data-submenu="configuracoes">
+            <a href="#/configuracoes" data-route="configuracoes">Geral</a>
+            <a href="#/importar-historico" data-route="importar-historico">Importar Histórico</a>
+            <a href="#/editais/importar" data-route="editais/importar">Importar Edital</a>
+          </div>
+        </div>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="streak-mini" id="streak-mini">
+          <span id="streak-mini-count">0 dias</span>
+        </div>
+        <div class="conta-sync" id="conta-sync">
+          <button id="conta-btn" class="btn btn-sm conta-btn">Sincronizar</button>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button id="mobile-menu-btn" class="icon-btn only-mobile" aria-label="Abrir menu">☰</button>
+        <div class="perfil-selector-wrap" id="perfil-selector-wrap">
+          <button id="perfil-selector-btn" class="perfil-selector-btn">Perfil</button>
+          <div class="perfil-selector-menu" id="perfil-selector-menu"></div>
+        </div>
+        <h1 id="page-title">Dashboard</h1>
+        <div id="ciclo-topbar-widget" class="ciclo-topbar-widget" style="display:none;">
+          <span class="ciclo-topbar-dot" id="ciclo-topbar-dot"></span>
+          <span class="ciclo-topbar-nome" id="ciclo-topbar-nome"></span>
+          <span class="ciclo-topbar-relogio" id="ciclo-topbar-relogio">00:00</span>
+          <button class="ciclo-topbar-btn" id="ciclo-topbar-pausar">⏸</button>
+          <button class="ciclo-topbar-btn" id="ciclo-topbar-retomar" style="display:none;">▶</button>
+          <button class="ciclo-topbar-btn ciclo-topbar-btn-ok" id="ciclo-topbar-concluir">✓</button>
+          <button class="ciclo-topbar-btn" id="ciclo-topbar-cancelar">✕</button>
+        </div>
+        <button id="add-questao-btn" class="btn btn-primary btn-sm">Registrar tentativa</button>
+      </header>
+
+      <main id="view" class="view"></main>
+    </div>
+  </div>
+
+  <div id="modal-root" class="modal-root"></div>
+  <div id="toast-root" class="toast-root"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script type="module" src="ia-gemini.js"></script>
+  <script src="database.js"></script>
+  <script src="charts.js"></script>
+  <script src="editais.js"></script>
+  <script src="importar-historico.js"></script>
+  <script src="ciclo.js"></script>
+  <script src="perfis.js"></script>
+  <script src="cloud-sync.js"></script>
+  <script src="revisao.js"></script>
+  <script src="simulados.js"></script>
+  <script src="estatisticas.js"></script>
+  <script src="caderno.js"></script>
+  <script src="learning-engine.js"></script>
+  <script src="mentor-ia.js"></script>
+  <script src="analise-erros.js"></script>
+  <script src="configuracoes.js"></script>
+  <script src="app.js"></script>
+  <script src="tts-modulo.js"></script>
+  <script src="tts-caderno-integracao.js"></script>
+  <script>
+    (function () {
+      const btn = document.getElementById('conta-btn');
+      const label = document.getElementById('conta-btn-label');
+      if (window.cloudSync) {
+        cloudSync.init((user) => {
+          if (user) {
+            if (label) label.textContent = user.displayName ? `${user.displayName.split(' ')[0]} (sair)` : 'Sair';
+            btn.title = `Conectado como ${user.email}. Clique para sair.`;
+          } else {
+            if (label) label.textContent = 'Sincronizar';
+            btn.title = 'Entrar com Google para sincronizar entre dispositivos';
+          }
+        });
+
+        btn.addEventListener('click', () => {
+          if (cloudSync.usuarioAtual) cloudSync.sair();
+          else cloudSync.entrarComGoogle();
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
