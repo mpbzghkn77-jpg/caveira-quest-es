@@ -37,38 +37,47 @@ function normalizeRoute() {
   return hash.startsWith('#') ? hash.replace('#', '') : hash;
 }
 
+function getRecords(key, fallback = []) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fallback;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function setRecords(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
 function getTentativas() {
-  return db.getAll('tentativas');
+  return getRecords('tentativas', []);
 }
 
 function getStats() {
   const tentativas = getTentativas();
   const total = tentativas.length;
   const acertadas = tentativas.filter((item) => item.resultado === 'certa' || item.acertou === true).length;
-  const erradas = total - acertadas;
+  const erradas = Math.max(total - acertadas, 0);
   const taxa = total ? Math.round((acertadas / total) * 100) : 0;
 
-  return {
-    total,
-    acertadas,
-    erradas,
-    taxa,
-    disciplinaMaisFrequente: (() => {
-      const map = {};
-      tentativas.forEach((item) => {
-        const key = item.disciplina || 'Sem disciplina';
-        map[key] = (map[key] || 0) + 1;
-      });
-      const entries = Object.entries(map);
-      if (!entries.length) return '—';
-      return entries.sort((a, b) => b[1] - a[1])[0][0];
-    })()
-  };
+  const countByDisciplina = {};
+  tentativas.forEach((item) => {
+    const disciplina = item.disciplina || 'Sem disciplina';
+    countByDisciplina[disciplina] = (countByDisciplina[disciplina] || 0) + 1;
+  });
+
+  const disciplinaMaisFrequente = Object.keys(countByDisciplina).length
+    ? Object.entries(countByDisciplina).sort((a, b) => b[1] - a[1])[0][0]
+    : '—';
+
+  return { total, acertadas, erradas, taxa, disciplinaMaisFrequente };
 }
 
 function renderDashboard() {
   const stats = getStats();
-
   return `
     <section class="panel">
       <div class="panel-head">
@@ -80,22 +89,10 @@ function renderDashboard() {
       </div>
 
       <div class="kpis">
-        <div class="kpi">
-          <strong>${stats.total}</strong>
-          <span>Questões</span>
-        </div>
-        <div class="kpi">
-          <strong>${stats.acertadas}</strong>
-          <span>Acertos</span>
-        </div>
-        <div class="kpi">
-          <strong>${stats.erradas}</strong>
-          <span>Erros</span>
-        </div>
-        <div class="kpi">
-          <strong>${stats.taxa}%</strong>
-          <span>Taxa</span>
-        </div>
+        <div class="kpi"><strong>${stats.total}</strong><span>Questões</span></div>
+        <div class="kpi"><strong>${stats.acertadas}</strong><span>Acertos</span></div>
+        <div class="kpi"><strong>${stats.erradas}</strong><span>Erros</span></div>
+        <div class="kpi"><strong>${stats.taxa}%</strong><span>Taxa</span></div>
       </div>
 
       <div class="resumo-grid">
@@ -114,29 +111,18 @@ function renderDashboard() {
 
 function renderTentativas() {
   const tentativas = getTentativas();
-
   const rows = tentativas.length
-    ? tentativas
-        .slice()
-        .reverse()
-        .map((item) => `
-          <tr>
-            <td>${item.disciplina || '—'}</td>
-            <td>${item.assunto || '—'}</td>
-            <td>${item.banca || '—'}</td>
-            <td>${item.concurso || '—'}</td>
-            <td><span class="status ${item.resultado === 'certa' || item.acertou ? 'success' : 'danger'}">${item.resultado === 'certa' || item.acertou ? 'Certa' : 'Errada'}</span></td>
-            <td>
-              <button class="btn btn-small danger" data-delete-id="${item.id}">Excluir</button>
-            </td>
-          </tr>
-        `)
-        .join('')
-    : `
+    ? tentativas.slice().reverse().map((item) => `
       <tr>
-        <td colspan="6" class="empty-cell">Nenhuma tentativa registrada ainda.</td>
+        <td>${item.disciplina || '—'}</td>
+        <td>${item.assunto || '—'}</td>
+        <td>${item.banca || '—'}</td>
+        <td>${item.concurso || '—'}</td>
+        <td><span class="status ${item.resultado === 'certa' || item.acertou ? 'success' : 'danger'}">${item.resultado === 'certa' || item.acertou ? 'Certa' : 'Errada'}</span></td>
+        <td><button class="btn btn-small danger" data-delete-id="${item.id}">Excluir</button></td>
       </tr>
-    `;
+    `).join('')
+    : `<tr><td colspan="6" class="empty-cell">Nenhuma tentativa registrada ainda.</td></tr>`;
 
   return `
     <section class="panel">
@@ -147,19 +133,9 @@ function renderTentativas() {
         </div>
         <button class="btn btn-primary" data-open-form>Registrar tentativa</button>
       </div>
-
       <div class="table-wrap">
         <table class="data-table">
-          <thead>
-            <tr>
-              <th>Disciplina</th>
-              <th>Assunto</th>
-              <th>Banca</th>
-              <th>Concurso</th>
-              <th>Resultado</th>
-              <th>Ação</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Disciplina</th><th>Assunto</th><th>Banca</th><th>Concurso</th><th>Resultado</th><th>Ação</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -167,83 +143,167 @@ function renderTentativas() {
   `;
 }
 
-function renderFallback(blockTitle) {
+function renderEditais() {
+  const editais = getRecords('editais', []);
+  const cards = editais.length
+    ? editais.map((item) => `
+      <div class="list-card">
+        <div>
+          <strong>${item.nome || 'Edital sem nome'}</strong>
+          <p>${item.disciplina || 'Sem disciplina'} • ${item.area || 'Área não definida'}</p>
+        </div>
+        <span class="pill">${item.data || 'Sem data'}</span>
+      </div>
+    `).join('')
+    : '<div class="empty-cell-box">Nenhum edital cadastrado.</div>';
+
   return `
     <section class="panel">
-      <p class="eyebrow">Módulo</p>
-      <h2>${blockTitle}</h2>
-      <p>Essa área foi preparada para receber a funcionalidade completa do projeto. A estrutura principal já está pronta e pronta para evoluir.</p>
+      <div class="panel-head"><div><p class="eyebrow">Planejamento</p><h2>Editais</h2></div><button class="btn btn-primary" data-add-edital>Adicionar edital</button></div>
+      <div class="list-stack">${cards}</div>
     </section>
   `;
+}
+
+function renderCaderno() {
+  const resumos = getRecords('resumos', []);
+  const cards = resumos.length
+    ? resumos.map((item) => `
+      <div class="list-card note-card">
+        <div>
+          <strong>${item.titulo || 'Resumo sem título'}</strong>
+          <p>${item.disciplina || 'Sem disciplina'}</p>
+        </div>
+        <small>${item.texto || 'Sem conteúdo.'}</small>
+      </div>
+    `).join('')
+    : '<div class="empty-cell-box">Nenhum resumo salvo.</div>';
+
+  return `
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">Estudo</p><h2>Caderno de Resumos</h2></div><button class="btn btn-primary" data-add-resumo>Novo resumo</button></div>
+      <div class="list-stack">${cards}</div>
+    </section>
+  `;
+}
+
+function renderSimulados() {
+  const simulados = getRecords('simulados', []);
+  const cards = simulados.length
+    ? simulados.map((item) => `
+      <div class="list-card">
+        <div><strong>${item.nome || 'Simulado'}</strong><p>${item.disciplina || 'Sem disciplina'} • ${item.nota || 0} pontos</p></div>
+        <span class="pill ${item.nota >= 70 ? 'positive' : 'warning'}">${item.nota >= 70 ? 'Bom' : 'Precisa revisar'}</span>
+      </div>
+    `).join('')
+    : '<div class="empty-cell-box">Nenhum simulado registrado.</div>';
+
+  return `
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">Métricas</p><h2>Simulados</h2></div><button class="btn btn-primary" data-add-simulado>Adicionar simulado</button></div>
+      <div class="list-stack">${cards}</div>
+    </section>
+  `;
+}
+
+function renderPerfis() {
+  const perfis = getRecords('perfis', [{ id: 'perfil-principal', nome: 'Perfil principal' }]);
+  const cards = perfis.map((perfil) => `
+    <div class="list-card">
+      <div><strong>${perfil.nome || 'Perfil'}</strong><p>${perfil.id === 'perfil-principal' ? 'Perfil principal' : 'Perfil adicional'}</p></div>
+      <button class="btn btn-small" data-select-perfil="${perfil.id}">Ativar</button>
+    </div>
+  `).join('');
+
+  return `
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">Usuário</p><h2>Perfis</h2></div><button class="btn btn-primary" data-add-perfil>Novo perfil</button></div>
+      <div class="list-stack">${cards}</div>
+    </section>
+  `;
+}
+
+function renderConfigPage() {
+  return `
+    <section class="panel">
+      <p class="eyebrow">Ajustes</p>
+      <h2>Configurações</h2>
+      <div class="config-list">
+        <div class="list-card"><div><strong>Tema</strong><p>Modo claro/escuro do app</p></div><button class="btn btn-small" data-toggle-theme>Alternar</button></div>
+      </div>
+    </section>
+  `;
+}
+
+function renderStatsPage(type) {
+  const tentativas = getTentativas();
+  const map = {};
+
+  tentativas.forEach((item) => {
+    const key = type === 'disciplinas' ? (item.disciplina || 'Sem disciplina') :
+      type === 'assuntos' ? (item.assunto || 'Sem assunto') :
+      type === 'bancas' ? (item.banca || 'Sem banca') :
+      (item.concurso || 'Sem concurso');
+    map[key] = (map[key] || 0) + 1;
+  });
+
+  const labelMap = {
+    disciplinas: 'Disciplinas',
+    assuntos: 'Assuntos',
+    bancas: 'Bancas',
+    concursos: 'Concursos'
+  };
+
+  const rows = Object.entries(map).length
+    ? Object.entries(map).map(([nome, valor]) => `<div class="stat-row"><span>${nome}</span><strong>${valor}</strong></div>`).join('')
+    : '<div class="empty-cell-box">Sem dados para exibir.</div>';
+
+  return `
+    <section class="panel">
+      <p class="eyebrow">Estatísticas</p>
+      <h2>${labelMap[type]}</h2>
+      <div class="stat-list">${rows}</div>
+    </section>
+  `;
+}
+
+function renderFallback(title) {
+  return `<section class="panel"><p class="eyebrow">Módulo</p><h2>${title}</h2><p>Essa área foi preparada para receber a funcionalidade completa do projeto.</p></section>`;
 }
 
 function renderPage() {
   const view = document.getElementById('view');
   const route = normalizeRoute();
   const pageTitle = document.getElementById('page-title');
-
   if (pageTitle) pageTitle.textContent = titleMap[route] || 'Dashboard';
 
   let html = renderDashboard();
-
   switch (route) {
-    case '/dashboard':
-      html = renderDashboard();
-      break;
-    case '/tentativas':
-      html = renderTentativas();
-      break;
-    case '/resolver-ia':
-      html = renderFallback('Resolver com IA');
-      break;
-    case '/mentor':
-      html = renderFallback('Mentor IA');
-      break;
-    case '/revisao':
-      html = renderFallback('Revisão do Dia');
-      break;
-    case '/diagnostico':
-      html = renderFallback('Diagnóstico de Erros');
-      break;
-    case '/caderno':
-      html = renderFallback('Caderno de Resumos');
-      break;
-    case '/ciclo':
-      html = renderFallback('Ciclo de Estudos');
-      break;
-    case '/estatisticas/disciplinas':
-      html = renderFallback('Estatísticas por Disciplinas');
-      break;
-    case '/estatisticas/assuntos':
-      html = renderFallback('Estatísticas por Assuntos');
-      break;
-    case '/estatisticas/bancas':
-      html = renderFallback('Estatísticas por Bancas');
-      break;
-    case '/estatisticas/concursos':
-      html = renderFallback('Estatísticas por Concursos');
-      break;
-    case '/editais':
-      html = renderFallback('Editais');
-      break;
-    case '/simulados':
-      html = renderFallback('Simulados');
-      break;
-    case '/perfis':
-      html = renderFallback('Perfis');
-      break;
-    case '/configuracoes':
-      html = renderFallback('Configurações');
-      break;
-    case '/importar-historico':
-      html = renderFallback('Importar Histórico');
-      break;
-    default:
-      html = renderDashboard();
+    case '/dashboard': html = renderDashboard(); break;
+    case '/tentativas': html = renderTentativas(); break;
+    case '/editais': html = renderEditais(); break;
+    case '/caderno': html = renderCaderno(); break;
+    case '/simulados': html = renderSimulados(); break;
+    case '/perfis': html = renderPerfis(); break;
+    case '/configuracoes': html = renderConfigPage(); break;
+    case '/estatisticas/disciplinas': html = renderStatsPage('disciplinas'); break;
+    case '/estatisticas/assuntos': html = renderStatsPage('assuntos'); break;
+    case '/estatisticas/bancas': html = renderStatsPage('bancas'); break;
+    case '/estatisticas/concursos': html = renderStatsPage('concursos'); break;
+    case '/resolver-ia': html = renderFallback('Resolver com IA'); break;
+    case '/mentor': html = renderFallback('Mentor IA'); break;
+    case '/revisao': html = renderFallback('Revisão do Dia'); break;
+    case '/diagnostico': html = renderFallback('Diagnóstico de Erros'); break;
+    case '/ciclo': html = renderFallback('Ciclo de Estudos'); break;
+    case '/importar-historico': html = renderFallback('Importar Histórico'); break;
+    default: html = renderDashboard();
   }
 
   view.innerHTML = html;
+  bindAfterRender();
+}
 
+function bindAfterRender() {
   document.querySelectorAll('[data-open-form]').forEach((button) => {
     button.addEventListener('click', openAttemptModal);
   });
@@ -251,27 +311,86 @@ function renderPage() {
   document.querySelectorAll('[data-delete-id]').forEach((button) => {
     button.addEventListener('click', () => {
       const id = button.getAttribute('data-delete-id');
-      const list = db.getAll('tentativas').filter((item) => String(item.id) !== String(id));
-      db.setAll('tentativas', list);
+      const list = getTentativas().filter((item) => String(item.id) !== String(id));
+      setRecords('tentativas', list);
       renderPage();
       showToast('Tentativa removida.');
     });
   });
+
+  document.querySelectorAll('[data-add-edital]').forEach((button) => button.addEventListener('click', () => openGenericModal({
+    title: 'Adicionar edital', fields: [
+      { name: 'nome', label: 'Nome', type: 'text', placeholder: 'Ex.: TRT 2025' },
+      { name: 'disciplina', label: 'Disciplina', type: 'text', placeholder: 'Ex.: Direito' },
+      { name: 'area', label: 'Área', type: 'text', placeholder: 'Ex.: Judiciária' },
+      { name: 'data', label: 'Data', type: 'date' }
+    ], onSubmit: (formData) => {
+      const current = getRecords('editais', []);
+      current.push({ id: Date.now(), nome: formData.get('nome') || 'Edital sem nome', disciplina: formData.get('disciplina') || 'Sem disciplina', area: formData.get('area') || 'Sem área', data: formData.get('data') || 'Sem data' });
+      setRecords('editais', current);
+      renderPage();
+      showToast('Edital salvo.');
+    }})));
+
+  document.querySelectorAll('[data-add-resumo]').forEach((button) => button.addEventListener('click', () => openGenericModal({
+    title: 'Novo resumo', fields: [
+      { name: 'titulo', label: 'Título', type: 'text', placeholder: 'Ex.: Teorema de Pitágoras' },
+      { name: 'disciplina', label: 'Disciplina', type: 'text', placeholder: 'Ex.: Matemática' },
+      { name: 'texto', label: 'Resumo', type: 'textarea', placeholder: 'Escreva o conteúdo do resumo...' }
+    ], onSubmit: (formData) => {
+      const current = getRecords('resumos', []);
+      current.push({ id: Date.now(), titulo: formData.get('titulo') || 'Resumo sem título', disciplina: formData.get('disciplina') || 'Sem disciplina', texto: formData.get('texto') || 'Sem conteúdo' });
+      setRecords('resumos', current);
+      renderPage();
+      showToast('Resumo salvo.');
+    }})));
+
+  document.querySelectorAll('[data-add-simulado]').forEach((button) => button.addEventListener('click', () => openGenericModal({
+    title: 'Adicionar simulado', fields: [
+      { name: 'nome', label: 'Nome', type: 'text', placeholder: 'Ex.: Simulado 1' },
+      { name: 'disciplina', label: 'Disciplina', type: 'text', placeholder: 'Ex.: Português' },
+      { name: 'nota', label: 'Nota', type: 'number', placeholder: 'Ex.: 78' }
+    ], onSubmit: (formData) => {
+      const current = getRecords('simulados', []);
+      current.push({ id: Date.now(), nome: formData.get('nome') || 'Simulado', disciplina: formData.get('disciplina') || 'Sem disciplina', nota: Number(formData.get('nota') || 0) });
+      setRecords('simulados', current);
+      renderPage();
+      showToast('Simulado salvo.');
+    }})));
+
+  document.querySelectorAll('[data-add-perfil]').forEach((button) => button.addEventListener('click', () => openGenericModal({
+    title: 'Novo perfil', fields: [
+      { name: 'nome', label: 'Nome do perfil', type: 'text', placeholder: 'Ex.: Perfil de Letras' }
+    ], onSubmit: (formData) => {
+      const current = getRecords('perfis', [{ id: 'perfil-principal', nome: 'Perfil principal' }]);
+      const perfil = { id: `perfil-${Date.now()}`, nome: formData.get('nome') || 'Novo perfil' };
+      current.push(perfil);
+      setRecords('perfis', current);
+      renderPage();
+      showToast('Perfil adicionado.');
+    }})));
+
+  document.querySelectorAll('[data-select-perfil]').forEach((button) => button.addEventListener('click', () => {
+    const perfilId = button.getAttribute('data-select-perfil');
+    state.perfilId = perfilId;
+    localStorage.setItem('configuracoes', JSON.stringify({ perfilAtivo: perfilId }));
+    showToast('Perfil ativado.');
+  }));
+
+  document.querySelectorAll('[data-toggle-theme]').forEach((button) => button.addEventListener('click', () => {
+    document.body.classList.toggle('theme-light');
+    showToast('Tema alternado.');
+  }));
 }
 
 function showToast(message) {
   const root = document.getElementById('toast-root');
   if (!root) return;
-
   const toast = document.createElement('div');
   toast.className = 'toast';
   toast.textContent = message;
   root.appendChild(toast);
-
-  setTimeout(() => {
-    toast.classList.add('show');
-  }, 10);
-
+  setTimeout(() => toast.classList.add('show'), 10);
   setTimeout(() => {
     toast.classList.remove('show');
     setTimeout(() => toast.remove(), 220);
@@ -281,46 +400,19 @@ function showToast(message) {
 function openAttemptModal() {
   const modalRoot = document.getElementById('modal-root');
   if (!modalRoot) return;
-
   modalRoot.innerHTML = `
     <div class="modal-backdrop" data-close-modal>
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-        <div class="modal-header">
-          <h3 id="modal-title">Registrar tentativa</h3>
-          <button class="icon-btn" data-close-modal aria-label="Fechar">✕</button>
-        </div>
-
+        <div class="modal-header"><h3 id="modal-title">Registrar tentativa</h3><button class="icon-btn" data-close-modal aria-label="Fechar">✕</button></div>
         <form id="attempt-form" class="attempt-form">
           <div class="form-grid">
-            <label>
-              Disciplina
-              <input type="text" name="disciplina" placeholder="Ex.: Matemática" required>
-            </label>
-            <label>
-              Assunto
-              <input type="text" name="assunto" placeholder="Ex.: Geometria" required>
-            </label>
-            <label>
-              Banca
-              <input type="text" name="banca" placeholder="Ex.: CESPE" required>
-            </label>
-            <label>
-              Concurso
-              <input type="text" name="concurso" placeholder="Ex.: TRT 2025" required>
-            </label>
-            <label>
-              Resultado
-              <select name="resultado">
-                <option value="certa">Certa</option>
-                <option value="errada">Errada</option>
-              </select>
-            </label>
+            <label>Disciplina<input type="text" name="disciplina" placeholder="Ex.: Matemática" required></label>
+            <label>Assunto<input type="text" name="assunto" placeholder="Ex.: Geometria" required></label>
+            <label>Banca<input type="text" name="banca" placeholder="Ex.: CESPE" required></label>
+            <label>Concurso<input type="text" name="concurso" placeholder="Ex.: TRT 2025" required></label>
+            <label>Resultado<select name="resultado"><option value="certa">Certa</option><option value="errada">Errada</option></select></label>
           </div>
-
-          <div class="modal-actions">
-            <button type="button" class="btn" data-close-modal>Cancelar</button>
-            <button type="submit" class="btn btn-primary">Salvar</button>
-          </div>
+          <div class="modal-actions"><button type="button" class="btn" data-close-modal>Cancelar</button><button type="submit" class="btn btn-primary">Salvar</button></div>
         </form>
       </div>
     </div>
@@ -341,19 +433,47 @@ function openAttemptModal() {
       criadoEm: new Date().toISOString()
     };
 
-    const list = db.getAll('tentativas');
+    const list = getTentativas();
     list.push(payload);
-    db.setAll('tentativas', list);
+    setRecords('tentativas', list);
     modalRoot.innerHTML = '';
     renderPage();
     showToast('Tentativa salva com sucesso.');
   });
 
-  modalRoot.querySelectorAll('[data-close-modal]').forEach((button) => {
-    button.addEventListener('click', () => {
-      modalRoot.innerHTML = '';
-    });
+  modalRoot.querySelectorAll('[data-close-modal]').forEach((button) => button.addEventListener('click', () => { modalRoot.innerHTML = ''; }));
+}
+
+function openGenericModal({ title, fields, onSubmit }) {
+  const modalRoot = document.getElementById('modal-root');
+  if (!modalRoot) return;
+
+  const inputs = fields.map((field) => {
+    if (field.type === 'textarea') return `<label>${field.label}<textarea name="${field.name}" placeholder="${field.placeholder || ''}" rows="5"></textarea></label>`;
+    return `<label>${field.label}<input type="${field.type || 'text'}" name="${field.name}" placeholder="${field.placeholder || ''}"></label>`;
+  }).join('');
+
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop" data-close-modal>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-header"><h3 id="modal-title">${title}</h3><button class="icon-btn" data-close-modal aria-label="Fechar">✕</button></div>
+        <form id="generic-form" class="attempt-form">
+          <div class="form-grid single-column">${inputs}</div>
+          <div class="modal-actions"><button type="button" class="btn" data-close-modal>Cancelar</button><button type="submit" class="btn btn-primary">Salvar</button></div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  const form = document.getElementById('generic-form');
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const formData = new FormData(form);
+    onSubmit(formData);
+    modalRoot.innerHTML = '';
   });
+
+  modalRoot.querySelectorAll('[data-close-modal]').forEach((button) => button.addEventListener('click', () => { modalRoot.innerHTML = ''; }));
 }
 
 function setupSidebar() {
@@ -367,20 +487,9 @@ function setupSidebar() {
     if (overlay) overlay.classList.toggle('open', open);
   };
 
-  if (toggle) {
-    toggle.addEventListener('click', () => {
-      const isOpen = sidebar && sidebar.classList.contains('open');
-      applySidebar(!isOpen);
-    });
-  }
-
-  if (mobileMenu) {
-    mobileMenu.addEventListener('click', () => applySidebar(true));
-  }
-
-  if (overlay) {
-    overlay.addEventListener('click', () => applySidebar(false));
-  }
+  if (toggle) toggle.addEventListener('click', () => applySidebar(!sidebar.classList.contains('open')));
+  if (mobileMenu) mobileMenu.addEventListener('click', () => applySidebar(true));
+  if (overlay) overlay.addEventListener('click', () => applySidebar(false));
 
   document.querySelectorAll('.nav-group-toggle').forEach((button) => {
     button.addEventListener('click', () => {
@@ -391,45 +500,16 @@ function setupSidebar() {
   });
 }
 
-function syncCloudButton() {
-  const btn = document.getElementById('conta-btn');
-  const label = document.getElementById('conta-btn-label');
-
-  if (!btn) return;
-
-  if (label) {
-    label.textContent = 'Sincronizar';
-  } else {
-    btn.textContent = 'Sincronizar';
-  }
-
-  btn.addEventListener('click', () => {
-    if (label) {
-      label.textContent = 'Sincronizar';
-    } else {
-      btn.textContent = 'Sincronizar';
-    }
-    showToast('Sincronização local habilitada.');
-  });
-}
-
 function setupApp() {
   setupSidebar();
-  syncCloudButton();
   renderPage();
-
   const addQuestaoBtn = document.getElementById('add-questao-btn');
-  if (addQuestaoBtn) {
-    addQuestaoBtn.addEventListener('click', openAttemptModal);
-  }
-
+  if (addQuestaoBtn) addQuestaoBtn.addEventListener('click', openAttemptModal);
   window.addEventListener('hashchange', renderPage);
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  if (!window.location.hash) {
-    window.location.hash = '#/dashboard';
-  }
+  if (!window.location.hash) window.location.hash = '#/dashboard';
   state.route = window.location.hash || '#/dashboard';
   setupApp();
 });
